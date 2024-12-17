@@ -26,13 +26,44 @@ TEMPLATE = """
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
     <title>Données CSV</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        h1 {
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
+        .stat {
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 <body>
-    <h1>Données CSV</h1>
-    <h2>Moyenne des 168 dernières valeurs : {{ mean_last_168 }}/5</h2>
-    <h2>Dernière valeur : {{ last_value_reported }}/5</h2>
+    <div class=\"container\">
+        <h1>Données CSV</h1>
+        <div class=\"stat\">
+            <h2>Moyenne des 168 dernières valeurs : <span style=\"color: #4CAF50;\">{{ mean_last_168 }}/5</span></h2>
+        </div>
+        <div class=\"stat\">
+            <h2>Dernière valeur : <span style=\"color: #FF5722;\">{{ last_value_reported }}/5</span></h2>
+        </div>
+    </div>
 </body>
 </html>
 """
