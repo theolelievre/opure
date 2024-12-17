@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, jsonify
 
 url = "https://storage.googleapis.com/mollusques-caen/data.csv"
 
@@ -71,6 +71,13 @@ TEMPLATE = """
 @app.route("/")
 def home():
     return render_template_string(TEMPLATE, mean_last_168=mean_last_168, last_value_reported=last_value_reported)
+
+@app.route("/data.json")
+def data_json():
+    return jsonify({
+        "mean_last_168": mean_last_168,
+        "last_value_reported": last_value_reported
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
