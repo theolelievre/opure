@@ -42,4 +42,4 @@ def home():
     return render_template_string(TEMPLATE, mean_last_168=mean_last_168, last_value_reported=last_value_reported)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000)
