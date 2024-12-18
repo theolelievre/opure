@@ -1,83 +1,72 @@
-import requests
-import pandas as pd
-from flask import Flask, render_template_string, jsonify
-
-url = "https://storage.googleapis.com/mollusques-caen/data.csv"
-
-def fetch_last_bytes(url, byte_count):
-    return requests.get(url, headers={"Range": f"bytes=-{byte_count}"}, timeout=10).content
-
-last_lines = fetch_last_bytes(url, 5040).decode("utf-8").splitlines()
-if len(last_lines) < 168: raise Exception("Données insuffisantes.")
-data_last_168 = pd.DataFrame([line.split(",") for line in last_lines[-168:]], columns=['timestamp', 'valeurs'])
-data_last_168['valeurs'] = pd.to_numeric(data_last_168['valeurs'], errors='coerce')
-if data_last_168['valeurs'].isnull().any(): raise Exception("Valeurs non valides.")
-
-mean_last_168 = round(data_last_168['valeurs'].mean() / 2)
-last_value_reported = round(data_last_168['valeurs'].iloc[-1] / 2)
+import csv, os, requests
+from datetime import datetime, timedelta
+from flask import Flask, request, jsonify, render_template_string
+from apscheduler.schedulers.background import BackgroundScheduler
 
 app = Flask(__name__)
+csv_data, last_update = [], None
+CSV_URL = 'https://storage.googleapis.com/mollusques-caen/data.csv'
 
-TEMPLATE = """
-<!DOCTYPE html>
-<html lang=\"fr\">
-<head>
-    <meta charset=\"UTF-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>Données CSV</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        h1 {
-            color: #4CAF50;
-            border-bottom: 2px solid #4CAF50;
-            padding-bottom: 10px;
-        }
-        h2 {
-            color: #555;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-            background: #fff;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-        }
-        .stat {
-            font-size: 1.2em;
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body>
-    <div class=\"container\">
-        <h1>Données CSV</h1>
-        <div class=\"stat\">
-            <h2>Moyenne des 168 dernières valeurs : <span style=\"color: #4CAF50;\">{{ mean_last_168 }}/5</span></h2>
-        </div>
-        <div class=\"stat\">
-            <h2>Dernière valeur : <span style=\"color: #FF5722;\">{{ last_value_reported }}/5</span></h2>
-        </div>
-    </div>
-</body>
-</html>
-"""
+def fetch_csv_data(source):
+    global csv_data, last_update
+    try:
+        if source.startswith("http"):
+            headers = {"Range": "bytes=-5040"}
+            response = requests.get(source, headers=headers)
+            response.raise_for_status()
+            lines = response.text.splitlines()
+        else:
+            with open(source, 'r', encoding='utf-8') as file:
+                lines = file.readlines()
 
-@app.route("/")
-def home():
-    return render_template_string(TEMPLATE, mean_last_168=mean_last_168, last_value_reported=last_value_reported)
+        reader = csv.reader(lines)
+        csv_data = [row for row in reader if len(row) == 2]
+        last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        print(f"Erreur CSV : {e}")
 
-@app.route("/data.json")
-def data_json():
-    return jsonify({
-        "mean_last_168": mean_last_168,
-        "last_value_reported": last_value_reported
-    })
+def get_current_note():
+    try:
+        return round((float(csv_data[-1][1]) / 10) * 5) if csv_data else None
+    except Exception as e:
+        print(f"Erreur note : {e}"); return None
+
+def calculate_weekly_average():
+    try:
+        now, week_ago = datetime.now(), datetime.now() - timedelta(days=7)
+        values = [float(row[1]) for row in csv_data if datetime.strptime(row[0].split("T")[0], "%Y-%m-%d") >= week_ago]
+        return round((sum(values) / len(values) / 10) * 5) if values else 0
+    except Exception as e:
+        print(f"Erreur moyenne : {e}"); return 0
+
+@app.route('/api/note', methods=['GET'])
+def note_endpoint():
+    global last_update
+    format_type = request.args.get('format', 'json').lower()
+    if not csv_data: fetch_csv_data(CSV_URL)
+    current_note, weekly_avg = get_current_note(), calculate_weekly_average()
+
+    if current_note is None:
+        return "Erreur traitement", 500
+
+    if format_type == 'json':
+        return jsonify({"current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "current_note": current_note, "weekly_avg": weekly_avg, "last_update": last_update})
+
+    if format_type == 'txt':
+        return render_template_string("<pre><b>Note : {{ note }}/5\nMoyenne : {{ avg }}/5<b></pre>", note=current_note, avg=weekly_avg)
+
+    return "Format non supportÃ©", 400
+
+def scheduled_task():
+    fetch_csv_data(CSV_URL)
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(scheduled_task, 'interval', minutes=60)
+scheduler.start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
+
+
+#if __name__ == '__main__':
+#    app.run(debug=True)
